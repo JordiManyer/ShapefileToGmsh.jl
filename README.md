@@ -11,16 +11,16 @@ A Julia package that converts ESRI Shapefiles into Gmsh geometry (`.geo`) and me
     <td align="center"><b>Australia — mesh</b></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/australia_geo.png" alt="Australia geometry" width="100%"/></td>
-    <td><img src="docs/assets/australia_mesh.png" alt="Australia mesh" width="100%"/></td>
+    <td><img src="docs/src/assets/australia_geo.png" alt="Australia geometry" width="100%"/></td>
+    <td><img src="docs/src/assets/australia_mesh.png" alt="Australia mesh" width="100%"/></td>
   </tr>
   <tr>
     <td align="center"><b>Spain</b></td>
     <td align="center"><b>Catalonia</b></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/spain.png" alt="Spain mesh" width="100%"/></td>
-    <td><img src="docs/assets/catalonia.png" alt="Catalonia mesh" width="100%"/></td>
+    <td><img src="docs/src/assets/spain.png" alt="Spain mesh" width="100%"/></td>
+    <td><img src="docs/src/assets/catalonia.png" alt="Catalonia mesh" width="100%"/></td>
   </tr>
 </table>
 
