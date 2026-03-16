@@ -49,11 +49,19 @@ function write_geo(
   mesh_size        :: Real               = 1.0,
   mesh_algorithm   :: Union{Int,Nothing} = nothing,
   split_components :: Bool               = false,
+  verbose          :: Bool               = false,
 )
   if split_components
-    _write_geo_split(geoms, name; mesh_size, mesh_algorithm)
+    _write_geo_split(geoms, name; mesh_size, mesh_algorithm, verbose)
   else
     _write_geo_single(geoms, name * ".geo"; mesh_size, mesh_algorithm)
+    if verbose
+      n_pts   = sum(npoints(g.exterior) + sum(npoints(h) for h in g.holes; init=0) for g in geoms)
+      n_edges = sum(nedges(g.exterior)  + sum(nedges(h)  for h in g.holes; init=0) for g in geoms)
+      println("  Surfaces   : $(length(geoms))")
+      println("  Points     : $(_fmt(n_pts))   Edges : $(_fmt(n_edges))")
+      println("  Written    : ", name, ".geo")
+    end
   end
   return name
 end
@@ -90,11 +98,16 @@ function generate_mesh(
   order            :: Int                = 1,
   recombine        :: Bool               = false,
   split_components :: Bool               = false,
+  verbose          :: Bool               = false,
 )
   if split_components
-    _generate_mesh_split(geoms, name; mesh_size, mesh_algorithm, order, recombine)
+    _generate_mesh_split(geoms, name; mesh_size, mesh_algorithm, order, recombine, verbose)
   else
-    _generate_mesh_single(geoms, name * ".msh"; mesh_size, mesh_algorithm, order, recombine)
+    stats = _generate_mesh_single(geoms, name * ".msh"; mesh_size, mesh_algorithm, order, recombine)
+    if verbose
+      println("  Nodes      : $(_fmt(stats.nodes))   Elements : $(_fmt(stats.elements))")
+      println("  Written    : ", name, ".msh")
+    end
   end
   return name
 end
@@ -128,13 +141,23 @@ function _write_geo_split(
   name           :: AbstractString;
   mesh_size      :: Real,
   mesh_algorithm,
+  verbose        :: Bool = false,
 )
   mkpath(name)
-  nd = ndigits(length(geoms))
+  n  = length(geoms)
+  nd = ndigits(n)
   for (i, g) in enumerate(geoms)
-    fname = joinpath(name, lpad(i, nd, '0') * ".geo")
+    bname = lpad(i, nd, '0') * ".geo"
+    fname = joinpath(name, bname)
     _write_geo_single([g], fname; mesh_size, mesh_algorithm)
+    if verbose
+      n_pts   = npoints(g.exterior) + sum(npoints(h) for h in g.holes; init=0)
+      n_edges = nedges(g.exterior)  + sum(nedges(h)  for h in g.holes; init=0)
+      @printf("  [%*d / %d]  %-*s  %s pts  %s edges\n",
+              nd, i, n, nd + 4, bname, _fmt(n_pts), _fmt(n_edges))
+    end
   end
+  verbose && println("  Written    : ", name, "/")
 end
 
 function _write_header(io::IO, ngeoms::Int, mesh_algorithm)
@@ -215,7 +238,7 @@ function _generate_mesh_single(
   mesh_algorithm,
   order,
   recombine,
-)
+) :: NamedTuple
   lc = Float64(mesh_size)
   gmsh.initialize()
   try
@@ -248,6 +271,13 @@ function _generate_mesh_single(
     end
 
     gmsh.write(path)
+
+    # Collect mesh statistics before finalizing.
+    node_tags, _, _   = gmsh.model.mesh.getNodes()
+    _, elem_tags, _   = gmsh.model.mesh.getElements(2)   # 2-D elements only
+    n_nodes    = length(node_tags)
+    n_elements = sum(length(t) for t in elem_tags; init = 0)
+    return (; nodes = n_nodes, elements = n_elements)
   finally
     gmsh.finalize()
   end
@@ -260,12 +290,30 @@ function _generate_mesh_split(
   mesh_algorithm,
   order,
   recombine,
+  verbose        :: Bool = false,
 )
   mkpath(name)
-  nd = ndigits(length(geoms))
+  n  = length(geoms)
+  nd = ndigits(n)
+  total_nodes    = 0
+  total_elements = 0
   for (i, g) in enumerate(geoms)
-    fname = joinpath(name, lpad(i, nd, '0') * ".msh")
-    _generate_mesh_single([g], fname; mesh_size, mesh_algorithm, order, recombine)
+    bname = lpad(i, nd, '0') * ".msh"
+    fname = joinpath(name, bname)
+    if verbose
+      @printf("  [%*d / %d]  %-*s  ", nd, i, n, nd + 4, bname)
+      flush(stdout)
+    end
+    stats = _generate_mesh_single([g], fname; mesh_size, mesh_algorithm, order, recombine)
+    total_nodes    += stats.nodes
+    total_elements += stats.elements
+    if verbose
+      @printf("%s nodes  %s elements\n", _fmt(stats.nodes), _fmt(stats.elements))
+    end
+  end
+  if verbose
+    println("  Total      : $(_fmt(total_nodes)) nodes  $(_fmt(total_elements)) elements")
+    println("  Written    : ", name, "/")
   end
 end
 
