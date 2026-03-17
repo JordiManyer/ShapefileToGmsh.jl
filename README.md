@@ -1,73 +1,103 @@
-# ShapefileToGmsh.jl
+# GeoGmsh.jl
 
-[![Build Status](https://github.com/JordiManyer/ShapefileToGmsh.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/JordiManyer/ShapefileToGmsh.jl/actions/workflows/CI.yml?query=branch%3Amaster)
-[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://JordiManyer.github.io/ShapefileToGmsh.jl/dev/)
+[![Build Status](https://github.com/JordiManyer/GeoGmsh.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/JordiManyer/GeoGmsh.jl/actions/workflows/CI.yml?query=branch%3Amaster)
+[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://JordiManyer.github.io/GeoGmsh.jl/dev/)
 
-A Julia package that converts ESRI Shapefiles into Gmsh geometry (`.geo`) and mesh (`.msh`) files, with full control over coordinate projection, edge resolution, and component selection.
+A Julia package that converts geospatial data into Gmsh geometry (`.geo`) and
+mesh (`.msh`) files. Accepts any GeoInterface-compatible source: Shapefiles,
+GeoJSON, GeoPackage, GeoParquet, NaturalEarth data, or raw geometries.
 
 <table>
   <tr>
-    <td align="center"><b>Australia — geometry</b></td>
-    <td align="center"><b>Australia — mesh</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/src/assets/australia_geo.png" alt="Australia geometry" width="100%"/></td>
-    <td><img src="docs/src/assets/australia_mesh.png" alt="Australia mesh" width="100%"/></td>
-  </tr>
-  <tr>
+    <td align="center"><b>France</b></td>
+    <td align="center"><b>Iberian Peninsula</b></td>
     <td align="center"><b>Spain</b></td>
     <td align="center"><b>Catalonia</b></td>
   </tr>
   <tr>
-    <td><img src="docs/src/assets/spain.png" alt="Spain mesh" width="100%"/></td>
-    <td><img src="docs/src/assets/catalonia.png" alt="Catalonia mesh" width="100%"/></td>
+    <td><img src="docs/src/assets/france.png" alt="France" width="100%"/></td>
+    <td><img src="docs/src/assets/iberia.png" alt="Iberia" width="100%"/></td>
+    <td><img src="docs/src/assets/spain.png" alt="Spain" width="100%"/></td>
+    <td><img src="docs/src/assets/catalonia.png" alt="Catalonia" width="100%"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Australia — geometry</b></td>
+    <td align="center"><b>Australia — mesh</b></td>
+    <td align="center"><b>Mont Blanc (3D terrain)</b></td>
+    <td align="center"><b>Everest (3D terrain)</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/src/assets/australia_geo.png" alt="Australia geometry" width="100%"/></td>
+    <td><img src="docs/src/assets/australia_mesh.png" alt="Australia mesh" width="100%"/></td>
+    <td><img src="docs/src/assets/montblanc.png" alt="Mont Blanc" width="100%"/></td>
+    <td><img src="docs/src/assets/everest.png" alt="Everest" width="100%"/></td>
   </tr>
 </table>
 
 ## Features
 
-- **Read & filter** — load Shapefiles and inspect their attribute tables; filter records or individual rings by any DBF attribute, geometry size, or bounding box.
-- **Reproject** — convert between coordinate systems via [Proj.jl](https://github.com/JuliaGeo/Proj.jl) (e.g. geographic degrees → Web Mercator metres).
-- **Resample edges** — coarsen over-resolved coastlines or refine coarse boundaries to a target edge length.
-- **Rescale** — normalise geometry into a dimensionless bounding box so `mesh_size` stays meaningful across datasets.
-- **Output** — write a human-readable `.geo` script (open in the Gmsh GUI) or call the Gmsh API directly to produce a `.msh` file; linear or quadratic elements, triangle or quad recombination.
-- **Split components** — one file per polygon ring, with user-defined filenames via `name_fn`.
+- **Universal reader** — load any geospatial format through a single `read_geodata` call backed by GDAL. Read directly from ZIP archives via `/vsizip/`.
+- **Reproject** — convert between coordinate systems via Proj.jl (e.g. geographic degrees → UTM metres).
+- **Simplify** — `MinEdgeLength` removes short edges; `AngleFilter` suppresses zig-zag spikes; compose algorithms with `∘`.
+- **Segmentize** — subdivide long edges to control maximum element size.
+- **Rescale** — normalise geometry into a dimensionless bounding box so `mesh_size` is consistent.
+- **3D terrain** — lift a 2D mesh to terrain elevation by sampling a DEM raster at every node.
+- **Output** — `.geo` script or `.msh` file via the Gmsh API; linear/quadratic elements, triangle or quad recombination.
 
 ## Installation
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/JordiManyer/ShapefileToGmsh.jl")
+Pkg.add(url = "https://github.com/JordiManyer/GeoGmsh.jl")
 ```
 
 ## Quick start
 
 ```julia
-using ShapefileToGmsh
+using GeoGmsh, NaturalEarth
 
-# 1. Inspect the shapefile — see what records and rings are available.
-list_components("NUTS_RG_01M_2024_3035.shp")
+# No files needed — NaturalEarth.jl provides built-in country boundaries
+countries = naturalearth("admin_0_countries", 110)
 
-# 2. Mesh Spain and Catalonia, one file each, named by NUTS ID.
-shapefile_to_msh(
-  "NUTS_RG_01M_2024_3035.shp",
-  "output/nuts";
-  select            = row -> row.NUTS_ID ∈ ("ES", "ES51") && row.ring == 1,
-  name_fn           = row -> string(row.NUTS_ID),
-  proj_method       = nothing,          # already in metres (EPSG:3035)
-  edge_length_range = (10_000.0, Inf),  # coarsen to ≥ 10 km edges
-  bbox_size         = 100.0,
-  mesh_size         = 2.0,
-  split_components  = true,
+geoms_to_msh(countries, "france";
+  select       = row -> get(row, :NAME, "") == "France" && row.ring == 1,
+  target_crs   = "EPSG:3857",
+  simplify_alg = MinEdgeLength(tol = 5_000.0),
+  bbox_size    = 100.0,
+  mesh_size    = 2.0,
 )
-# → output/nuts/ES.msh, output/nuts/ES51.msh
+# → france.msh
 ```
 
-See the [documentation](https://JordiManyer.github.io/ShapefileToGmsh.jl/dev/) for the full pipeline guide and API reference.
+```julia
+using GeoGmsh
+
+# From any file — Shapefile, GeoJSON, GeoPackage, ZIP, …
+geoms_to_msh("NUTS_RG_01M_2024_4326_LEVL_0.geojson", "germany";
+  select       = row -> row.NUTS_ID == "DE" && row.ring == 1,
+  target_crs   = "EPSG:3857",
+  simplify_alg = MinEdgeLength(tol = 10_000.0),
+  bbox_size    = 100.0,
+  mesh_size    = 2.0,
+)
+# → germany.msh
+```
+
+```julia
+# 3D terrain mesh from a bounding box + DEM
+geoms_to_msh_3d("bbox.geojson", "dem_utm.tif", "terrain";
+  target_crs   = "EPSG:32632",
+  simplify_alg = MinEdgeLength(tol = 500.0),
+  mesh_size    = 500.0,
+)
+# → terrain.msh  (node z-coordinates sampled from DEM)
+```
+
+See the [documentation](https://JordiManyer.github.io/GeoGmsh.jl/dev/) for the
+full pipeline guide, API reference, and worked examples.
 
 ## Data sources
 
-The example meshes above were generated from the following open datasets:
-
-- **NUTS — Territorial units statistics** (Spain, Catalonia): Eurostat / GISCO, © European Union, [https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics](https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics)
-- **ASGS Edition 3** (Australia): Australian Bureau of Statistics, [https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3](https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3)
+- **NUTS** (Spain, Catalonia, Navarre, Iberia): Eurostat / GISCO, © European Union.
+- **ASGS Edition 3** (Australia): Australian Bureau of Statistics.
+- **Copernicus GLO-30 DEM** (Mont Blanc, Everest, Pyrenees): © DLR / Airbus.

@@ -1,18 +1,22 @@
-"""
-Everest terrain mesh example.
-
-Meshes the terrain around Mount Everest using a bounding box defined in
-geographic coordinates (EPSG:4326), reprojected to UTM zone 45N
-(EPSG:32645, metres) for physically consistent distances and elevations.
-
-DEM tiles used (1°×1° each, GLO-30 convention):
-  N27_00_E086_00, N27_00_E087_00,
-  N28_00_E086_00, N28_00_E087_00
-
-Bounding box of interest (EPSG:4326):
-  86.551666, 27.712710, 87.301483, 28.214870
-  (small padding added to avoid edge effects)
-"""
+# # Everest — 3D terrain mesh
+#
+# This example produces a terrain-following 3D surface mesh for the Mount
+# Everest region using a user-defined bounding box and Copernicus GLO-30 DEM
+# tiles.  The workflow is identical to the Mont Blanc example but covers a
+# larger area (four DEM tiles) and uses UTM zone 45N.
+#
+# **Features highlighted:**
+# - 3D terrain meshing with `geoms_to_msh_3d` over a larger multi-tile domain
+# - Choosing the correct UTM zone for the area of interest (zone 45N for Nepal)
+#
+# !!! note "Aspect ratio"
+#     The domain spans ~84 km × ~66 km horizontally; Everest is 8,849 m tall.
+#     The true aspect ratio is roughly 1:9 — apply vertical exaggeration in
+#     your visualiser to make the topography visible.
+#
+# | Everest (3D terrain) |
+# |:--------------------:|
+# | ![Everest mesh](../assets/everest.png) |
 
 using GeoGmsh
 using Downloads
@@ -21,9 +25,10 @@ import GDAL_jll
 data_dir = joinpath(@__DIR__, "..", "data")
 mkpath(data_dir)
 
-# ---------------------------------------------------------------------------
-# 1. Write bounding-box polygon as GeoJSON (EPSG:4326)
-# ---------------------------------------------------------------------------
+# ## Bounding box
+#
+# Domain of interest with a small padding:
+# original box: `86.551666, 27.712710, 87.301483, 28.214870`
 
 lon_min, lat_min = 86.50, 27.66
 lon_max, lat_max = 87.35, 28.26
@@ -47,9 +52,10 @@ open(bbox_path, "w") do io
 """)
 end
 
-# ---------------------------------------------------------------------------
-# 2. Download Copernicus GLO-30 DEM tiles
-# ---------------------------------------------------------------------------
+# ## Download DEM tiles
+#
+# Four 1°×1° tiles cover the padded domain:
+# latitude bands N27 and N28, longitude columns E086 and E087.
 
 tiles = [
   ("N27_00", "E086_00"), ("N27_00", "E087_00"),
@@ -80,19 +86,13 @@ for (lat, lon) in tiles
 end
 println("$(length(tile_paths)) tile(s) ready.")
 
-# ---------------------------------------------------------------------------
-# 3. Mosaic DEM tiles into a single VRT (EPSG:4326)
-# ---------------------------------------------------------------------------
+# ## Mosaic and reproject
 
 dem_vrt_4326 = joinpath(data_dir, "everest_dem_4326.vrt")
 GDAL_jll.gdalbuildvrt_exe() do exe
   run(`$exe $dem_vrt_4326 $tile_paths`)
 end
 println("Mosaic (EPSG:4326): ", dem_vrt_4326)
-
-# ---------------------------------------------------------------------------
-# 4. Reproject DEM to UTM zone 45N (EPSG:32645, metres)
-# ---------------------------------------------------------------------------
 
 dem_tif_utm = joinpath(data_dir, "everest_dem_32645.tif")
 if !isfile(dem_tif_utm)
@@ -105,9 +105,7 @@ if !isfile(dem_tif_utm)
   println("  Saved: ", dem_tif_utm)
 end
 
-# ---------------------------------------------------------------------------
-# 5. Terrain mesh
-# ---------------------------------------------------------------------------
+# ## 3D terrain mesh
 
 output = joinpath(data_dir, "everest")
 

@@ -1,19 +1,24 @@
-"""
-Spain mesh example.
-
-Downloads two Eurostat NUTS boundary files:
-  - NUTS-0 (country level) to select the Spanish mainland (ring 1 of the "ES"
-    polygon — the largest component once islands are split out).
-  - NUTS-2 (region level) to select Catalonia ("ES51", ring 1).
-
-Produces two meshes:
-  1. spain     — mainland Spain only.
-  2. catalonia — Catalonia only.
-
-Data source: Eurostat GISCO
-  NUTS 2024 – 1:1 Million, EPSG:4326
-  https://gisco-services.ec.europa.eu/distribution/v2/nuts/
-"""
+# # Spain and Catalonia (2D)
+#
+# This example downloads NUTS administrative boundaries from Eurostat GISCO
+# and produces two separate meshes: mainland Spain (country level, NUTS-0)
+# and Catalonia (region level, NUTS-2).
+#
+# **Features highlighted:**
+# - Downloading and reading GeoJSON files from Eurostat GISCO
+# - Selecting features by NUTS ID and ring index
+# - Composing simplification algorithms with `∘`: `AngleFilter ∘ MinEdgeLength`
+#   applies minimum-edge-length first, then removes zig-zag spikes by angle
+# - Using different NUTS levels (NUTS-0 vs NUTS-2) for country vs. region
+#
+# !!! note "NUTS levels"
+#     NUTS-0 = countries (e.g. `"ES"` for Spain).
+#     NUTS-2 = regions (e.g. `"ES51"` for Catalonia).
+#     They are distributed in separate files.
+#
+# | Spain | Catalonia |
+# |:-----:|:---------:|
+# | ![Spain mesh](../assets/spain.png) | ![Catalonia mesh](../assets/catalonia.png) |
 
 using GeoGmsh
 using Downloads
@@ -22,9 +27,10 @@ import GeometryOps as GO
 data_dir = joinpath(@__DIR__, "..", "data")
 mkpath(data_dir)
 
-# ---------------------------------------------------------------------------
-# Download
-# ---------------------------------------------------------------------------
+# ## Download
+#
+# Two NUTS files are needed: NUTS-0 for the country outline and NUTS-2 for
+# the regional breakdown.
 
 base_url = "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/"
 
@@ -46,21 +52,23 @@ if !isfile(nuts2_path)
   println("  Saved: ", nuts2_path)
 end
 
-# ---------------------------------------------------------------------------
-# Inspect
-# ---------------------------------------------------------------------------
+# ## Mainland Spain
+#
+# The NUTS-0 `"ES"` feature is a MultiPolygon whose largest component
+# (`ring == 1`) is the Iberian mainland.
+#
+# The composed algorithm `AngleFilter(tol=20°) ∘ MinEdgeLength(tol=10 km)`
+# first removes short edges (≤ 10 km), then iteratively removes vertices
+# where the interior angle is shallower than 20°, eliminating zig-zag spikes
+# along the coastline.
+
+println("\n=== Spain (mainland) ===")
 
 println("\nNUTS-0 Spain components (sorted by area):")
 comps = list_components(nuts0_path)
 comps = filter(row -> row.NUTS_ID == "ES", comps)
 sort!(comps, :area, rev = true)
 println(comps)
-
-# ---------------------------------------------------------------------------
-# 1. Mainland Spain — ring 1 of the NUTS-0 "ES" polygon
-# ---------------------------------------------------------------------------
-
-println("\n=== Spain (mainland) ===")
 
 spain_alg = AngleFilter(tol = 20.0) ∘ MinEdgeLength(tol = 10_000.0)
 
@@ -83,9 +91,11 @@ geoms_to_msh(
   verbose      = true,
 )
 
-# ---------------------------------------------------------------------------
-# 2. Catalonia (ES51) — ring 1 of the NUTS-2 "ES51" polygon
-# ---------------------------------------------------------------------------
+# ## Catalonia
+#
+# Catalonia (`"ES51"`) is a NUTS-2 region on the north-east coast of Spain.
+# We use the finer NUTS-2 file, with `MinEdgeLength` only (the boundary is
+# smoother at this scale so angle filtering is not needed).
 
 println("\n=== Catalonia (ES51) ===")
 

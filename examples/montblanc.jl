@@ -1,17 +1,25 @@
-"""
-Mont Blanc terrain mesh example.
-
-Meshes the terrain around Mont Blanc using a bounding box defined directly
-in geographic coordinates (EPSG:4326), reprojected to UTM zone 32N
-(EPSG:32632, metres) for physically consistent distances and elevations.
-
-DEM tiles used (1°×1° each, GLO-30 convention):
-  N45_00_E006_00 and N45_00_E007_00 — covers 45–46°N, 6–8°E.
-
-Bounding box of interest (EPSG:4326):
-  6.785431, 45.785243, 7.044296, 45.956878
-  (small padding added to avoid edge effects)
-"""
+# # Mont Blanc — 3D terrain mesh
+#
+# This example produces a terrain-following 3D surface mesh for the Mont Blanc
+# massif using a user-defined bounding box and a Copernicus GLO-30 Digital
+# Elevation Model.
+#
+# **Features highlighted:**
+# - Defining the domain as a bounding-box GeoJSON polygon (no administrative
+#   boundary needed)
+# - Downloading and mosaicking Copernicus GLO-30 DEM tiles with `GDAL_jll`
+# - `geoms_to_msh_3d`: generates a flat 2D mesh then lifts every node's
+#   z-coordinate by sampling the DEM
+# - Choosing a UTM CRS so that `mesh_size` is in metres
+#
+# !!! note "Aspect ratio"
+#     The Mont Blanc massif spans ~37 km × ~27 km horizontally but only
+#     ~4,800 m vertically.  At true scale the mesh looks flat — apply vertical
+#     exaggeration (e.g. 5×) in your visualiser (ParaView, QGIS 3D, Visit).
+#
+# | Mont Blanc (3D terrain) |
+# |:-----------------------:|
+# | ![Mont Blanc mesh](../assets/montblanc.png) |
 
 using GeoGmsh
 using Downloads
@@ -20,9 +28,13 @@ import GDAL_jll
 data_dir = joinpath(@__DIR__, "..", "data")
 mkpath(data_dir)
 
-# ---------------------------------------------------------------------------
-# 1. Write bounding-box polygon as GeoJSON (EPSG:4326)
-# ---------------------------------------------------------------------------
+# ## Bounding box
+#
+# We define the domain of interest as a simple rectangular polygon in
+# EPSG:4326.  A small padding around the target area avoids edge effects
+# in the mesh.
+#
+# Original bounding box: `6.785431, 45.785243, 7.044296, 45.956878`
 
 lon_min, lat_min = 6.73, 45.75
 lon_max, lat_max = 7.10, 45.99
@@ -46,9 +58,14 @@ open(bbox_path, "w") do io
 """)
 end
 
-# ---------------------------------------------------------------------------
-# 2. Download Copernicus GLO-30 DEM tiles
-# ---------------------------------------------------------------------------
+# ## Download DEM tiles
+#
+# The Copernicus GLO-30 DEM is distributed as 1°×1° GeoTIFF tiles labelled
+# by their south-west corner.  Tiles are freely available from the public AWS
+# S3 bucket — no authentication required.
+#
+# Our domain sits in the N45 latitude band (45–46°N) and spans longitude
+# columns E006 and E007.
 
 tiles = [("N45_00", "E006_00"), ("N45_00", "E007_00")]
 
@@ -76,19 +93,17 @@ for (lat, lon) in tiles
 end
 println("$(length(tile_paths)) tile(s) ready.")
 
-# ---------------------------------------------------------------------------
-# 3. Mosaic DEM tiles into a single VRT (EPSG:4326)
-# ---------------------------------------------------------------------------
+# ## Mosaic and reproject
+#
+# `gdalbuildvrt` stitches the individual tiles into a seamless virtual raster
+# (VRT).  `gdalwarp` then reprojects it to UTM zone 32N (EPSG:32632) at 30 m
+# resolution so that coordinates and elevations share the same unit (metres).
 
 dem_vrt_4326 = joinpath(data_dir, "montblanc_dem_4326.vrt")
 GDAL_jll.gdalbuildvrt_exe() do exe
   run(`$exe $dem_vrt_4326 $tile_paths`)
 end
 println("Mosaic (EPSG:4326): ", dem_vrt_4326)
-
-# ---------------------------------------------------------------------------
-# 4. Reproject DEM to UTM zone 32N (EPSG:32632, metres)
-# ---------------------------------------------------------------------------
 
 dem_tif_utm = joinpath(data_dir, "montblanc_dem_32632.tif")
 if !isfile(dem_tif_utm)
@@ -101,9 +116,13 @@ if !isfile(dem_tif_utm)
   println("  Saved: ", dem_tif_utm)
 end
 
-# ---------------------------------------------------------------------------
-# 5. Terrain mesh
-# ---------------------------------------------------------------------------
+# ## 3D terrain mesh
+#
+# `geoms_to_msh_3d` runs the standard 2D pipeline (reproject → simplify →
+# ingest) and then lifts every mesh node's z-coordinate by bilinearly
+# interpolating the DEM at its (x, y) position.
+# `mesh_size = 500.0` gives ~500 m characteristic element length (in metres,
+# consistent with the UTM CRS).
 
 output = joinpath(data_dir, "montblanc")
 

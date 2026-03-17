@@ -21,6 +21,8 @@ read_shapefile
 
 ```@docs
 MinEdgeLength
+AngleFilter
+ComposedAlg
 ```
 
 ## Rescaling and filtering
@@ -43,10 +45,22 @@ write_geo
 generate_mesh
 ```
 
+## 3D terrain
+
+```@docs
+DEMRaster
+read_dem
+sample_elevation
+lift_to_3d
+geoms_to_geo_3d
+geoms_to_msh_3d
+```
+
 ## Geometry types
 
 ```@docs
-ShapeGeometry
+Geometry2D
+Geometry3D
 Contour
 npoints
 nedges

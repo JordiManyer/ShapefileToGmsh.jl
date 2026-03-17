@@ -238,9 +238,25 @@ function _load(df::DataFrames.AbstractDataFrame; select, verbose)
   return df2, source_crs
 end
 
-function _load(geom; select, verbose)
-  verbose && println("Ingesting: $(typeof(geom))")
-  return geom, nothing   # no CRS available from raw GI geometries
+function _load(fc; select, verbose)
+  if GI.isfeaturecollection(fc)
+    # Convert to a DataFrame so that `select` can filter on feature properties.
+    rows = Vector{Dict{Symbol,Any}}()
+    for i in 1:GI.nfeature(fc)
+      feat  = GI.getfeature(fc, i)
+      props = GI.properties(feat)
+      geom  = GI.geometry(feat)
+      row   = isnothing(props) ? Dict{Symbol,Any}() :
+                Dict{Symbol,Any}(Symbol(k) => v for (k, v) in props)
+      row[:geometry] = geom
+      push!(rows, row)
+    end
+    df = isempty(rows) ? DataFrame() : DataFrame(rows)
+    df = _expand_rings(df)
+    return _load(df; select, verbose)
+  end
+  verbose && println("Ingesting: $(typeof(fc))")
+  return fc, nothing   # no CRS available from raw GI geometries
 end
 
 # Apply f to each geometry in a DataFrame's geometry column.
