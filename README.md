@@ -4,8 +4,10 @@
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://JordiManyer.github.io/GeoGmsh.jl/dev/)
 
 A Julia package that converts geospatial data into Gmsh geometry (`.geo`) and
-mesh (`.msh`) files. Accepts any GeoInterface-compatible source: Shapefiles,
-GeoJSON, GeoPackage, GeoParquet, NaturalEarth data, or raw geometries.
+mesh (`.msh`) files. Built on the [JuliaGeo](https://github.com/JuliaGeo)
+ecosystem — GeoInterface, GeometryOps, Proj, ArchGDAL — and accepts any
+GeoInterface-compatible source: Shapefiles, GeoJSON, GeoPackage, GeoParquet,
+NaturalEarth data, or raw geometries.
 
 **Flat 2D meshes** from any geospatial boundary:
 

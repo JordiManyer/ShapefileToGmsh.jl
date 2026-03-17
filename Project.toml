@@ -1,6 +1,6 @@
 name = "GeoGmsh"
 uuid = "6f0d8a70-7550-4fa5-a91d-b527153fa687"
-authors = ["Jordi Manyer - jordi.manyer@monash.edu"]
+authors = ["Jordi Manyer <jordi.manyer@monash.edu>"]
 version = "0.1.0"
 
 [deps]
