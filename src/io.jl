@@ -83,8 +83,8 @@ end
 # Per-geometry exploder: returns a NamedTuple of aligned vectors, one entry per
 # polygon component.  Used by _expand_rings via ByRow + AsTable + flatten.
 function _geom_components(g)
-  if isnothing(g)
-    return (_geom=[g], ring=[0], n_pts=[0], area=[NaN],
+  if isnothing(g) || ismissing(g)
+    return (_geom=[missing], ring=[0], n_pts=[0], area=[NaN],
             xmin=[NaN], xmax=[NaN], ymin=[NaN], ymax=[NaN])
   end
   if GI.geomtrait(g) isa GI.MultiPolygonTrait
