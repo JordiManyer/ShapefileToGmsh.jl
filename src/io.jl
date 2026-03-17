@@ -65,7 +65,7 @@ function _expand_rings(df::DataFrames.AbstractDataFrame)
   for (k, v) in crs_meta                             # restore CRS on the new column
     DataFrames.colmetadata!(out, geom_col, k, v; style = :note)
   end
-  return flatten(out, [geom_col, :ring, :n_pts, :area, :xmin, :xmax, :ymin, :ymax])
+  return DataFrames.flatten(out, [geom_col, :ring, :n_pts, :area, :xmin, :xmax, :ymin, :ymax])
 end
 
 # Statistics for a single polygon's exterior ring.
