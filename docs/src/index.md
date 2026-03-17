@@ -113,6 +113,7 @@ geoms_to_msh_3d("region.geojson", "dem_utm.tif", "terrain";
 | Rescale | [`rescale`](@ref) | Normalise into an L × L bounding box |
 | DEM | [`read_dem`](@ref), [`lift_to_3d`](@ref) | Sample elevations (3D only) |
 | Output | [`write_geo`](@ref) / [`generate_mesh`](@ref) | Write `.geo` or `.msh` |
+| Volume | [`generate_mesh_volume`](@ref) | Extrude surface → tetrahedral solid (3D only) |
 
 See the [Pipeline guide](@ref pipeline) and [API reference](@ref api) for details,
 or browse the **Examples** section in the sidebar for full worked examples.

@@ -41,13 +41,22 @@ geoms_to_msh_3d("region.shp", "srtm.tif", "terrain";
 6. [`rescale`](@ref)                      — normalise into an `L × L` bounding box
 7. [`write_geo`](@ref) or [`generate_mesh`](@ref) — write output
 
-## Pipeline (3D)
+## Pipeline (3D surface)
 
 `geoms_to_geo_3d` / `geoms_to_msh_3d` add after step 6:
 
 7. [`read_dem`](@ref)    — read DEM raster (GeoTIFF, SRTM, NetCDF, …)
 8. [`lift_to_3d`](@ref)  — sample boundary point elevations
 9. [`write_geo`](@ref) or [`generate_mesh`](@ref) with [`Geometry3D`](@ref)
+
+## Pipeline (3D volume)
+
+`geoms_to_msh_3d_volume` produces a **tetrahedral** solid mesh by extruding
+the terrain surface downward by `depth` (in CRS units):
+
+7. [`read_dem`](@ref)             — read DEM raster
+8. [`lift_to_3d`](@ref)           — sample boundary point elevations
+9. [`generate_mesh_volume`](@ref) — flat 2D mesh → prism extrusion → 3 tets per prism
 """
 module GeoGmsh
 

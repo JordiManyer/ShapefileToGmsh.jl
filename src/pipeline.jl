@@ -197,32 +197,40 @@ function geoms_to_msh_3d(
 end
 
 """
-    geoms_to_msh_3d_volume(geom, dem_path, output_name; depth, kwargs...) -> String
+    geoms_to_msh_3d_volume(geom, dem_path, output_name; kwargs...) -> String
 
 Generate a **volumetric** (tetrahedral) terrain mesh.
 
 Runs the same pipeline as [`geoms_to_msh_3d`](@ref) to produce a terrain
-surface mesh, then extrudes it downward to a flat bottom plane at
-`z_bottom = min(z_terrain) - depth`, splitting each triangular prism into
-3 tetrahedra.
+surface mesh, then extrudes it downward to a flat bottom plane, splitting
+each triangular prism into 3 tetrahedra.  **Top**, **Bottom**, **Sides**, and
+**Volume** physical groups are written to the `.msh` file for boundary
+condition assignment in FEM solvers.
 
 The DEM must be in the same CRS as the (reprojected) vector data.  `bbox_size`
 is silently ignored for the same reason as in [`geoms_to_msh_3d`](@ref).
 
 # Keyword arguments
 All keyword arguments of [`geoms_to_msh_3d`](@ref) are supported, plus:
-- `depth` — (**required**) vertical thickness of the volume below the terrain
-             minimum, in the same units as the CRS (metres for a projected CRS).
+- `depth`    — vertical thickness below `min(z_terrain)` (same CRS units).
+               Required unless `z_bottom` is given.
+- `z_bottom` — absolute bottom elevation; overrides `depth` when provided.
+- `split_components` — write one `.msh` per geometry component (default `false`).
 """
 function geoms_to_msh_3d_volume(
   geom,
-  dem_path     :: AbstractString,
-  output_name  :: AbstractString;
-  depth        :: Real,
-  nodata_fill  :: Real = 0.0,
-  verbose      :: Bool = true,
+  dem_path         :: AbstractString,
+  output_name      :: AbstractString;
+  depth            :: Union{Real,Nothing} = nothing,
+  z_bottom         :: Union{Real,Nothing} = nothing,
+  nodata_fill      :: Real                = 0.0,
+  split_components :: Bool                = false,
+  verbose          :: Bool                = true,
   kwargs...,
 )
+  if isnothing(depth) && isnothing(z_bottom)
+    error("Either `depth` or `z_bottom` must be specified.")
+  end
   if !isnothing(get(kwargs, :bbox_size, nothing))
     @warn "`bbox_size` is not supported in `geoms_to_msh_3d_volume` and will be ignored."
   end
@@ -238,9 +246,9 @@ function geoms_to_msh_3d_volume(
   dem     = read_dem(dem_path)
   geoms3d = lift_to_3d(geoms2d, dem; nodata_fill = Float64(nodata_fill))
   verbose && println("\nMeshing (3D volume): ", length(geoms3d), " component(s) → ",
-                     output_name, ".msh")
+                     output_name, split_components ? "/" : ".msh")
   generate_mesh_volume(geoms3d, dem, output_name;
-    depth,
+    depth, z_bottom, split_components,
     mesh_size      = get(kwargs, :mesh_size,      1.0),
     mesh_algorithm = get(kwargs, :mesh_algorithm, nothing),
     verbose,

@@ -68,7 +68,7 @@ edge shorter than the threshold remains in the output.
 ```julia
 geoms_to_geo(df, "output";
   target_crs   = "EPSG:3857",
-  simplify_tol = 5_000.0,    # no edge shorter than 5 km
+  simplify_alg = MinEdgeLength(tol = 5_000.0),   # no edge shorter than 5 km
 )
 ```
 
@@ -93,8 +93,8 @@ large distances and linear interpolation becomes inaccurate — use
 
 ```julia
 geoms_to_geo(df, "output";
-  target_crs     = "EPSG:3857",
-  max_edge_length = 50_000.0,   # no edge longer than 50 km
+  target_crs   = "EPSG:3857",
+  max_distance = 50_000.0,   # no edge longer than 50 km
 )
 ```
 
@@ -165,7 +165,7 @@ geoms_to_msh(
     select = row -> row.CNTR_CODE == "DE" && row.LEVL_CODE == 0),
   "germany";
   target_crs   = "EPSG:3857",
-  simplify_tol = 50_000.0,
+  simplify_alg = MinEdgeLength(tol = 50_000.0),
   bbox_size    = 100.0,
   mesh_size    = 2.0,
 )
@@ -179,6 +179,51 @@ shapefile_to_msh("regions.shp", "output";
   mesh_size  = 1.0,
 )
 ```
+
+## 3D terrain meshing
+
+For terrain-following meshes, the pipeline branches after step 2 (reprojection)
+and does **not** use `bbox_size` — the geometry must stay in the DEM's native
+CRS units (metres) so that elevation sampling is consistent.
+
+### Surface mesh
+
+[`geoms_to_msh_3d`](@ref) generates a flat 2D triangle mesh and then lifts
+every node's z-coordinate by bilinearly sampling a DEM:
+
+```julia
+geoms_to_msh_3d("region.geojson", "dem_utm.tif", "terrain";
+  target_crs   = "EPSG:32632",          # must match the DEM CRS
+  simplify_alg = MinEdgeLength(tol = 500.0),
+  mesh_size    = 500.0,                 # metres
+)
+# → terrain.msh  (triangulated surface)
+```
+
+The DEM file can be any GDAL-supported raster (GeoTIFF, SRTM `.hgt`, NetCDF, …).
+It must already be reprojected to the same CRS as `target_crs`.  See the
+Mont Blanc and Everest examples for a full GDAL download + mosaic + reproject
+workflow.
+
+### Volumetric mesh
+
+[`geoms_to_msh_3d_volume`](@ref) extends the surface pipeline to produce a
+solid tetrahedral mesh by extruding the terrain surface downward by `depth`
+(in the same units as the CRS) to a flat bottom plane:
+
+```julia
+geoms_to_msh_3d_volume("region.geojson", "dem_utm.tif", "terrain_vol";
+  target_crs   = "EPSG:32632",
+  simplify_alg = MinEdgeLength(tol = 500.0),
+  mesh_size    = 500.0,
+  depth        = 1_000.0,              # 1 km pedestal below terrain minimum
+)
+# → terrain_vol.msh  (tetrahedral volume)
+```
+
+Each surface triangle is extruded into a triangular prism which is then split
+into three tetrahedra, so the volume mesh has exactly 3× as many elements as
+the surface mesh and twice as many nodes.
 
 ## Ring orientation
 

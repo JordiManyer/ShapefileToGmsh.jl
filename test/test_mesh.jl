@@ -10,6 +10,16 @@ const _SQUARE = Geometry2D(
   Contour[],
 )
 
+# Synthetic flat DEM covering the square with padding (constant elevation 100 m).
+# transform = [x_origin, x_pixel, x_rot, y_origin, y_rot, y_pixel]
+# 5 cols × 6 rows, 5 km pixels, top-left at (-5000, 20000).
+const _DEM = DEMRaster(
+  fill(100.0, 5, 6),
+  [-5_000.0, 5_000.0, 0.0, 20_000.0, 0.0, -5_000.0],
+  nothing, nothing,
+)
+const _SQUARE3D = [lift_to_3d(_SQUARE, _DEM)]
+
 const TMP_NAME = joinpath(tempdir(), "test_shapefile_to_gmsh_mesh")
 
 function run()
@@ -39,6 +49,31 @@ function run()
   files = readdir(TMP_NAME)
   @test length(files) == 2
   @test all(endswith(".msh"), files)
+  rm(TMP_NAME; recursive = true)
+
+  # Volume mesh: depth kwarg.
+  generate_mesh_volume(_SQUARE3D, _DEM, TMP_NAME; mesh_size = 2_000.0, depth = 500.0)
+  @test isfile(TMP_NAME * ".msh")
+  content = read(TMP_NAME * ".msh", String)
+  @test occursin("\$Elements",      content)
+  @test occursin("\$Nodes",         content)
+  @test occursin("\$PhysicalNames", content)
+  @test occursin("\"Volume\"",      content)
+  @test occursin("\"Top\"",         content)
+  @test occursin("\"Bottom\"",      content)
+  @test occursin("\"Sides\"",       content)
+  rm(TMP_NAME * ".msh")
+
+  # Volume mesh: z_bottom kwarg (absolute elevation).
+  generate_mesh_volume(_SQUARE3D, _DEM, TMP_NAME; mesh_size = 2_000.0, z_bottom = -200.0)
+  @test isfile(TMP_NAME * ".msh")
+  rm(TMP_NAME * ".msh")
+
+  # Volume mesh: split_components.
+  generate_mesh_volume(_SQUARE3D, _DEM, TMP_NAME; mesh_size = 2_000.0, depth = 500.0,
+                        split_components = true)
+  @test isdir(TMP_NAME)
+  @test length(readdir(TMP_NAME)) == length(_SQUARE3D)
   rm(TMP_NAME; recursive = true)
 end
 

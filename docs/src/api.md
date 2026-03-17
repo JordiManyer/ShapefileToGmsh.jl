@@ -54,6 +54,11 @@ sample_elevation
 lift_to_3d
 geoms_to_geo_3d
 geoms_to_msh_3d
+```
+
+## 3D volume
+
+```@docs
 geoms_to_msh_3d_volume
 generate_mesh_volume
 ```
