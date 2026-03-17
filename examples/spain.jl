@@ -17,6 +17,7 @@ Data source: Eurostat GISCO
 
 using GeoGmsh
 using Downloads
+import GeometryOps as GO
 
 data_dir = joinpath(@__DIR__, "..", "data")
 mkpath(data_dir)
@@ -61,9 +62,7 @@ println(comps)
 
 println("\n=== Spain (mainland) ===")
 
-import GeometryOps as GO
-
-spain_alg = MinEdgeLength(tol = 10_000.0) ∘ AngleFilter(tol = 20.0)
+spain_alg = AngleFilter(tol = 20.0) ∘ MinEdgeLength(tol = 10_000.0)
 
 geoms_to_geo(
   nuts0_path, joinpath(data_dir, "spain");

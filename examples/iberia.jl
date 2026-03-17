@@ -69,10 +69,12 @@ println("  Done.  Result trait: ", GI.geomtrait(iberia_geom))
 
 output = joinpath(data_dir, "iberia")
 
+iberia_alg = AngleFilter(tol = 20.0) ∘ MinEdgeLength(tol = 10_000.0)
+
 geoms_to_geo(
   iberia_geom, output;
   target_crs   = "EPSG:3857",
-  simplify_alg = MinEdgeLength(tol = 10_000.0),
+  simplify_alg = iberia_alg,
   bbox_size    = 100.0,
   verbose      = true,
 )
@@ -80,7 +82,7 @@ geoms_to_geo(
 geoms_to_msh(
   iberia_geom, output;
   target_crs   = "EPSG:3857",
-  simplify_alg = MinEdgeLength(tol = 10_000.0),
+  simplify_alg = iberia_alg,
   bbox_size    = 100.0,
   mesh_size    = 2.0,
   verbose      = true,

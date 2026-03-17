@@ -2,8 +2,8 @@
 Australia mesh example.
 
 Downloads the ABS ASGS 2021 boundary file for the whole continent,
-reprojects to Web Mercator, simplifies, and produces both a .geo
-script and a split .msh file (one mesh per island component).
+reprojects to Web Mercator, simplifies, and produces a .geo script
+and a .msh file for the mainland only.
 
 Data source: Australian Bureau of Statistics (ABS)
   Australian Statistical Geography Standard (ASGS) Edition 3
@@ -56,7 +56,6 @@ geoms_to_geo(
   target_crs       = "EPSG:3857",
   simplify_alg     = MinEdgeLength(tol = 100_000.0),
   bbox_size        = 100.0,
-  split_components = true,
   verbose          = true,
 )
 
@@ -67,6 +66,5 @@ geoms_to_msh(
   simplify_alg     = MinEdgeLength(tol = 100_000.0),
   bbox_size        = 100.0,
   mesh_size        = 2.0,
-  split_components = true,
   verbose          = true,
 )
