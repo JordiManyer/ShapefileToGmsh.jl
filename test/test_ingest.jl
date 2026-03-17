@@ -5,7 +5,7 @@ import GeoInterface as GI
 import GeoJSON
 using Test
 
-const FIXTURE_SHP = joinpath(@__DIR__, "..", "meshes", "toy", "fixture.shp")
+const FIXTURE_SHP = joinpath(@__DIR__, "meshes", "fixture.shp")
 
 # ---------------------------------------------------------------------------
 # Helpers to build raw GI geometries

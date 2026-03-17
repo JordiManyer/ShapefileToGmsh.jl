@@ -3,7 +3,7 @@ module GmshTests
 using GeoGmsh
 using Test
 
-const FIXTURE_SHP = joinpath(@__DIR__, "..", "meshes", "toy", "fixture.shp")
+const FIXTURE_SHP = joinpath(@__DIR__, "meshes", "fixture.shp")
 const TMP_NAME    = joinpath(tempdir(), "test_geogmsh")
 
 function run()
