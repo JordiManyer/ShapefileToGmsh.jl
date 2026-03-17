@@ -98,7 +98,12 @@ elevation, and writes a `.geo` file with 3D point coordinates.
 
 The DEM must be in the same CRS as the (reprojected) vector data.
 
-All 2D keyword arguments are supported. Additional argument:
+All 2D keyword arguments are supported, **except `bbox_size`** which is
+silently ignored: rescaling the geometry after ingest would make its (x, y)
+coordinates inconsistent with the DEM's geotransform. Use `mesh_size` in
+the native CRS units (metres for a projected CRS) instead.
+
+Additional argument:
 - `nodata_fill` — elevation substituted for out-of-bounds or nodata cells
                   (default `0.0`).
 """
@@ -110,12 +115,16 @@ function geoms_to_geo_3d(
   verbose      :: Bool = true,
   kwargs...,
 )
+  if !isnothing(get(kwargs, :bbox_size, nothing))
+    @warn "`bbox_size` is not supported in `geoms_to_geo_3d` and will be ignored. " *
+          "The DEM coordinates must match the geometry CRS; rescaling would break that."
+  end
   geom_raw, source_crs = _load(geom; select = get(kwargs, :select, nothing), verbose)
   geoms2d = _run_pipeline(geom_raw, source_crs;
     target_crs      = get(kwargs, :target_crs,      "EPSG:3857"),
     simplify_tol    = get(kwargs, :simplify_tol,    nothing),
     max_edge_length = get(kwargs, :max_edge_length,  nothing),
-    bbox_size       = get(kwargs, :bbox_size,        nothing),
+    bbox_size       = nothing,   # must not rescale before DEM sampling
     verbose,
   )
   verbose && println("\nReading DEM: ", dem_path)
@@ -140,7 +149,12 @@ by sampling `dem_path` at its (x, y) position.
 
 The DEM must be in the same CRS as the (reprojected) vector data.
 
-All 2D keyword arguments are supported. Additional argument:
+All 2D keyword arguments are supported, **except `bbox_size`** which is
+silently ignored: rescaling the geometry after ingest would make its (x, y)
+coordinates inconsistent with the DEM's geotransform. Use `mesh_size` in
+the native CRS units (metres for a projected CRS) instead.
+
+Additional argument:
 - `nodata_fill` — elevation substituted for out-of-bounds or nodata cells
                   (default `0.0`).
 """
@@ -152,12 +166,16 @@ function geoms_to_msh_3d(
   verbose      :: Bool = true,
   kwargs...,
 )
+  if !isnothing(get(kwargs, :bbox_size, nothing))
+    @warn "`bbox_size` is not supported in `geoms_to_msh_3d` and will be ignored. " *
+          "The DEM coordinates must match the geometry CRS; rescaling would break that."
+  end
   geom_raw, source_crs = _load(geom; select = get(kwargs, :select, nothing), verbose)
   geoms2d = _run_pipeline(geom_raw, source_crs;
     target_crs      = get(kwargs, :target_crs,      "EPSG:3857"),
     simplify_tol    = get(kwargs, :simplify_tol,    nothing),
     max_edge_length = get(kwargs, :max_edge_length,  nothing),
-    bbox_size       = get(kwargs, :bbox_size,        nothing),
+    bbox_size       = nothing,   # must not rescale before DEM sampling
     verbose,
   )
   verbose && println("\nReading DEM: ", dem_path)

@@ -3,125 +3,108 @@
 This page walks through the full conversion pipeline step by step.
 All steps are also available individually so you can mix and match.
 
-## 1. Inspect the attribute table
+## 1. Read geospatial data
 
-Official shapefiles often contain many components — countries, statistical
-regions, islands — identified by attribute columns in the `.dbf` sidecar.
-Call [`list_components`](@ref) before loading geometry to understand what is
-available and find the field values to filter on:
-
-```julia
-meta = list_components("NUTS_RG_01M_2024_3035.shp")
-# prints a formatted table with idx, NUTS_ID, LEVL_CODE, CNTR_CODE, NAME_LATN, …
-
-# Access programmatically:
-germany = filter(r -> r.CNTR_CODE == "DE", meta)
-```
-
-The returned `Vector{NamedTuple}` has an `:idx` field (1-based row number) and
-one field per DBF column.
-
-## 2. Read the shapefile
+[`read_geodata`](@ref) reads any GDAL-supported format — Shapefile, GeoJSON,
+GeoPackage, GeoParquet, GeoArrow, FlatGeobuf — and returns a standard
+`DataFrame` with a `:geometry` column and CRS metadata attached.
 
 ```julia
-geoms, source_crs = read_shapefile("file.shp")
+df = read_geodata("regions.shp")
+df = read_geodata("countries.geojson")
+df = read_geodata("data.gpkg"; layer = "admin")
 ```
-
-`geoms` is a `Vector{ShapeGeometry}`.  Each `ShapeGeometry` holds one exterior
-polygon ring and zero or more hole rings.  MultiPolygon records are
-automatically flattened: each outer ring becomes its own `ShapeGeometry`.
-
-`source_crs` is the raw WKT string from the `.prj` sidecar (or `nothing` if no
-`.prj` is present).  It is passed directly to PROJ for reprojection.
-
-### Selecting components
 
 Pass `select` to load only a subset of records:
 
 ```julia
-# By row index (as shown by list_components)
-geoms, crs = read_shapefile("file.shp"; select = [3, 7, 12])
-
-# By predicate on DBF attributes
-geoms, crs = read_shapefile("NUTS.shp";
+df = read_geodata("NUTS.shp";
   select = row -> row.CNTR_CODE == "DE" && row.LEVL_CODE == 0)
 ```
 
-!!! tip
-    Use `list_components` first to discover field names and values.
+Call [`list_components`](@ref) to inspect what is in a file before deciding
+which records to select:
 
-## 3. Reproject coordinates
+```julia
+list_components("NUTS_RG_01M_2024_3035.shp")
+```
 
-Geographic shapefiles store coordinates in decimal degrees (lon, lat).
-Gmsh works in a flat Cartesian plane, so reprojection to metres is required
+### NaturalEarth data
+
+NaturalEarth.jl returns GeoInterface-compatible `FeatureCollection` objects
+that `geoms_to_geo` accepts directly — no file reading needed:
+
+```julia
+using NaturalEarth
+fc = naturalearth("admin_0_countries", 110)
+geoms_to_geo(fc, "countries"; target_crs = "EPSG:3857", mesh_size = 2.0)
+```
+
+## 2. Reproject coordinates
+
+Geographic data is often stored in decimal degrees (lon/lat, EPSG:4326).
+Gmsh works in a flat Cartesian plane, so reprojection to metres is needed
 before edge-length operations or meshing.
 
+`geoms_to_geo` handles this automatically via `target_crs`:
+
 ```julia
-geoms = project_to_meters(geoms, source_crs; target = "EPSG:3857")
+geoms_to_geo(df, "output"; target_crs = "EPSG:3857")   # Web Mercator
+geoms_to_geo(df, "output"; target_crs = "EPSG:3035")   # ETRS89 / LAEA Europe
 ```
 
-`target` may be any CRS string understood by PROJ (EPSG code, WKT, PROJ
-string) or a pre-built `Proj.Transformation`:
+Pass `target_crs = nothing` to skip reprojection (e.g. data already in metres).
+
+Reprojection is done by `GeometryOps.reproject` (via Proj.jl) on the raw
+GeoInterface geometry, before ingestion.
+
+## 3. Simplify edges
+
+Large shapefiles and NaturalEarth data contain far more boundary points than a
+coarse mesh needs. [`MinEdgeLength`](@ref) removes vertices that are closer
+than `simplify_tol` to the last *retained* vertex — guaranteeing no boundary
+edge shorter than the threshold remains in the output.
 
 ```julia
-import Proj
-trans = Proj.Transformation(source_crs, "EPSG:3035"; always_xy = true)
-geoms = project_to_meters(geoms, source_crs; target = trans)
+geoms_to_geo(df, "output";
+  target_crs   = "EPSG:3857",
+  simplify_tol = 5_000.0,    # no edge shorter than 5 km
+)
 ```
 
-Pass `proj_method = nothing` to the pipeline functions (or skip this step
-entirely) when the shapefile is already in metres — for example NUTS data in
-EPSG:3035.
-
-## 4. Adjust edge resolution
-
-Large shapefiles contain far more points than a coarse mesh needs, and
-generating the mesh from millions of points is slow.
-
-### Coarsening
-
-Remove intermediate points to enforce a minimum edge length:
+You can also call it directly on any GeoInterface geometry:
 
 ```julia
-geoms = coarsen_edges(geoms, 500_000.0)   # ≥ 500 km edges
+import GeometryOps as GO
+simplified = GO.simplify(MinEdgeLength(tol = 5_000.0), polygon)
 ```
 
-Two strategies are available via the `strategy` keyword:
+!!! note "Why not `RadialDistance`?"
+    `RadialDistance` (built into GeometryOps) measures distance to the last
+    *visited* point, not the last *kept* one. This means short edges can still
+    appear after simplification. `MinEdgeLength` measures to the last kept
+    point, giving a strict guarantee.
 
-| Strategy | Behaviour |
-|----------|-----------|
-| `:iterative` (default) | Repeat single-pass sweeps until stable. Guarantees no edge shorter than the threshold remains. |
-| `:single` | One left-to-right sweep. Fast; may leave residual short edges. |
+## 4. Segmentize edges
 
-### Refinement
-
-Subdivide edges that are too long:
+To ensure no edge is *longer* than a threshold — useful when boundaries span
+large distances and linear interpolation becomes inaccurate — use
+`GeometryOps.segmentize` via the `max_edge_length` keyword:
 
 ```julia
-geoms = refine_edges(geoms, 100_000.0)   # ≤ 100 km edges
+geoms_to_geo(df, "output";
+  target_crs     = "EPSG:3857",
+  max_edge_length = 50_000.0,   # no edge longer than 50 km
+)
 ```
 
-Edges longer than `max_edge_length` are split into equispaced sub-edges.
-
-### Filtering degenerate components
-
-Aggressive coarsening can reduce small islands to triangular rings (3 points)
-that cause Gmsh to fail.  [`filter_components`](@ref) removes them:
+For large geographic regions, geodesic segmentization is more accurate than
+planar; call it directly before passing data to the pipeline:
 
 ```julia
-geoms = filter_components(geoms)          # drops rings with < 4 points
-geoms = filter_components(geoms; min_points = 5)   # stricter threshold
-```
-
-The pipeline functions call this automatically after coarsening.
-
-### Combined edge-length range
-
-In the pipeline functions, pass `edge_length_range = (min, max)` to run
-coarsening and refinement together:
-
-```julia
-shapefile_to_geo(...; edge_length_range = (50_000.0, 500_000.0))
+import GeometryOps as GO
+geom = GO.segmentize(GO.Geodesic(), feature_collection; max_distance = 50_000.0)
+geoms_to_geo(geom, "output"; target_crs = "EPSG:3857")
 ```
 
 ## 5. Rescale geometry
@@ -131,7 +114,7 @@ FEM solver that expects an O(1) domain), rescale the geometry so its largest
 bounding-box dimension equals `L`:
 
 ```julia
-geoms = rescale(geoms, 100.0)   # fits into a 100 × 100 box, origin at (0,0)
+geoms_to_geo(df, "output"; bbox_size = 100.0)
 ```
 
 After rescaling, set `mesh_size` in the same normalised units (e.g. `2.0`
@@ -169,46 +152,41 @@ Both output functions accept `split_components = true` to write one file per
 
 ```julia
 generate_mesh(geoms, "output/australia"; mesh_size = 2.0, split_components = true)
-# → output/australia/0001.msh, 0002.msh, …
+# → output/australia/1.msh, 2.msh, …
 ```
 
 ## One-call pipeline
 
-For most use cases `shapefile_to_geo` or `shapefile_to_msh` compose the
-entire pipeline:
+For most use cases `geoms_to_geo` or `geoms_to_msh` compose the entire pipeline:
 
 ```julia
-shapefile_to_msh(
-  "NUTS_RG_01M_2024_3035.shp",
-  "output/germany";
-  select            = row -> row.CNTR_CODE == "DE" && row.LEVL_CODE == 0,
-  proj_method       = nothing,
-  edge_length_range = (50_000.0, Inf),
-  bbox_size         = 100.0,
-  mesh_size         = 2.0,
-  split_components  = true,
+geoms_to_msh(
+  read_geodata("NUTS_RG_01M_2024_3035.shp";
+    select = row -> row.CNTR_CODE == "DE" && row.LEVL_CODE == 0),
+  "germany";
+  target_crs   = "EPSG:3857",
+  simplify_tol = 50_000.0,
+  bbox_size    = 100.0,
+  mesh_size    = 2.0,
 )
 ```
 
-## Shapefile conventions
+Or directly from a file path:
 
-### Winding order
+```julia
+shapefile_to_msh("regions.shp", "output";
+  target_crs = "EPSG:3857",
+  mesh_size  = 1.0,
+)
+```
 
-ESRI Shapefiles use the **opposite** winding convention to the OGC standard:
+## Ring orientation
 
-- Clockwise (CW) rings → exterior polygons
-- Counter-clockwise (CCW) rings → holes
+Gmsh requires:
 
-`read_shapefile` detects this automatically using the sign of the shoelace
-area and normalises ring orientation for Gmsh:
+- Exterior rings → **CCW** (counter-clockwise, positive signed area)
+- Hole rings → **CW** (clockwise, negative signed area)
 
-- Stored exteriors → CCW (positive signed area)
-- Stored holes → CW (negative signed area)
-
-### MultiPolygon flattening
-
-A single Shapefile record (one row in the attribute table) may contain
-multiple disjoint outer rings — an archipelago stored as one feature, for
-example.  Each outer ring (plus its holes) is returned as a separate
-`ShapeGeometry`.  Consequently, `length(geoms)` may exceed the number of
-DBF records.
+[`ingest`](@ref) enforces this convention automatically on all input geometries,
+regardless of the source winding order (ESRI Shapefiles use the opposite
+convention, for example).

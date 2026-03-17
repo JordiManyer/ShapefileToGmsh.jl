@@ -3,6 +3,8 @@
 ## Pipeline
 
 ```@docs
+geoms_to_geo
+geoms_to_msh
 shapefile_to_geo
 shapefile_to_msh
 ```
@@ -10,23 +12,28 @@ shapefile_to_msh
 ## I/O
 
 ```@docs
-read_shapefile
+read_geodata
 list_components
+read_shapefile
 ```
 
-## Projection and rescaling
+## Simplification
 
 ```@docs
-project_to_meters
+MinEdgeLength
+```
+
+## Rescaling and filtering
+
+```@docs
 rescale
+filter_components
 ```
 
-## Edge operations
+## Ingest
 
 ```@docs
-coarsen_edges
-refine_edges
-filter_components
+ingest
 ```
 
 ## Gmsh output
